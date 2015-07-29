@@ -1,4 +1,4 @@
--module(simple_im_client_sup).
+-module(client_sup).
 
 -behaviour(supervisor).
 
@@ -9,7 +9,7 @@
 -export([init/1]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+-define(CHILD, {client, {client, start_link, []}, temporary, brutal_kill, worker, [client]}).
 
 %% ===================================================================
 %% API functions
@@ -23,7 +23,4 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10},
-           [?CHILD(client_sup, supervisor),
-            ?CHILD(client_manager, worker)]} }.
-
+    {ok, { {simple_one_for_one, 0, 1}, [?CHILD] } }.
