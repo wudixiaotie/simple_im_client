@@ -1,0 +1,12 @@
+{application, simple_im_client,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { simple_im_client_app, []}},
+  {env, []}
+ ]}.
