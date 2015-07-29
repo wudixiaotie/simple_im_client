@@ -29,21 +29,30 @@ init([]) ->
     {ok, State}.
 
 
+handle_call(send_msg, _From, State) ->
+    Msg = <<"[msg] id=\"a_01\" mc=\"hello\" from=\"1@android\" to=\"2@ipad\"">>,
+    gen_tcp:send(State#state.socket, Msg),
+    {reply, nomatch, State}.
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 
 % <<"[msg] id=\"a_01\" mc=\"hello\" from=\"1@android\" to=\"2@ipad\"">>
-handle_info ({tcp, _Socket, Data}, #state{socket = Socket} = State) ->
+handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
     io:format ("Got msg======~p~n", [Data]),
     {ok, Toml} = etoml:parse(Data),
-    [{<<"msg">>, Attrs}] = Toml,
-    {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-    Ack = <<"[ack] id=\"", MsgId/binary, "\"">>,
-    io:format ("Send ack======~p~n", [Ack]),
-    gen_tcp:send(Socket, Ack),
+    case etoml:parse(Data) of
+        [{<<"msg">>, Attrs}] ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[ack] id=\"", MsgId/binary, "\"">>,
+            io:format ("Send ack======~p~n", [Ack]),
+            gen_tcp:send(Socket, Ack);
+        [{<<"ack">>, Attrs}] ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            io:format ("Msg id=~p send success======~n", [MsgId])
+    end,
     {noreply, State};
 handle_info ({tcp_closed, _Socket}, State) ->
-    {noreply, State};
+    {stop, tcp_closed, NewState};
 handle_info(_Info, State) -> {noreply, State}.
 
 
