@@ -24,7 +24,8 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
+    % {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
+    {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
     State = #state{socket = Socket},
     {ok, State}.
 
