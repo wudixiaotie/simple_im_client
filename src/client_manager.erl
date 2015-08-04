@@ -24,10 +24,9 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    client:start_link(<<"1@android">>),
-    client:start_link(<<"2@android">>),
-    {ok, Pid} = supervisor:start_child(client_sup, []),
-    % gen_server:call(Pid, send_msg),
+    {ok, Pid1} = supervisor:start_child(client_sup, [<<"1@android">>]),
+    {ok, Pid2} = supervisor:start_child(client_sup, [<<"2@ipad">>]),
+    gen_server:call(Pid1, send_msg),
     {ok, []}.
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.

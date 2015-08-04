@@ -45,7 +45,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) -> {noreply, State}.
 
 handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
-    io:format ("===Got msg: ~p~n", [Data]),
+    io:format ("~p===Got msg: ~p~n", [self(), Data]),
     {ok, Toml} = etoml:parse(Data),
     case Toml of
         [{<<"rr">>, Attrs}] ->
