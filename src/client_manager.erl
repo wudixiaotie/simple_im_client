@@ -9,6 +9,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
           terminate/2, code_change/3]).
 
+-include ("user.hrl").
+
 
 
 %% ===================================================================
@@ -24,8 +26,10 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, Pid1} = supervisor:start_child(client_sup, [<<"1@android">>]),
-    {ok, Pid2} = supervisor:start_child(client_sup, [<<"2@ipad">>]),
+    User1 = #user{id = <<"1">>, device = <<"android">>},
+    User2 = #user{id = <<"2">>, device = <<"ipad">>},
+    {ok, Pid1} = supervisor:start_child(client_sup, [User1]),
+    {ok, Pid2} = supervisor:start_child(client_sup, [User2]),
     gen_server:call(Pid1, send_msg),
     {ok, []}.
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.

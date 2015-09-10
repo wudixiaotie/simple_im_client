@@ -9,32 +9,34 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
           terminate/2, code_change/3]).
 
--record (state, {socket}).
+-record (state, {socket, user}).
+
+-include ("user.hrl").
 
 %% ===================================================================
 %% APIs
 %% ===================================================================
 
-start_link(UserId) ->
-    gen_server:start_link(?MODULE, [UserId], []).
+start_link(User) ->
+    gen_server:start_link(?MODULE, [User], []).
 
 
 %% ===================================================================
 %% gen_server callbacks
 %% ===================================================================
 
-init([UserId]) ->
+init([User]) ->
     {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
     % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
-    State = #state{socket = Socket},
-    Msg = <<"[r] id=\"a_01\" c=\"login\" userid=\"", UserId/binary, "\"">>,
+    State = #state{socket = Socket, user = User},
+    Msg = <<"[r] id=\"a_01\" c=\"login\" [r.user] id=\"", (User#user.id)/binary, "\" device=\"", (User#user.device)/binary, "\"">>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client login!~n"),
     {ok, State}.
 
 
-handle_call(send_msg, _From, State) ->
-    Msg = <<"[m] id=\"a_02\" c=\"hello\" from=\"1@android\" to=\"2@ipad\"">>,
+handle_call(send_msg, _From, #state{user = User} = State) ->
+    Msg = <<"[m] id=\"a_02\" c=\"hello\" [m.from] id=\"", (User#user.id)/binary, "\" device=\"", (User#user.device)/binary, "\" [m.to] id=\"2\" device=\"@ipad\"">>,
     Result = gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {reply, Result, State};
