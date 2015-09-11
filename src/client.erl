@@ -40,6 +40,11 @@ handle_call(send_msg, _From, #state{user = User} = State) ->
     Result = gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {reply, Result, State};
+handle_call(send_group_msg, _From, #state{user = User} = State) ->
+    Msg = <<"[gm] id=\"a_03\" c=\"hello\" [gm.user] id=\"", (User#user.id)/binary, "\" device=\"", (User#user.device)/binary, "\" [gm.group] id=\"123\"">>,
+    Result = gen_tcp:send(State#state.socket, Msg),
+    io:format ("===client send msg!~n"),
+    {reply, Result, State};
 handle_call(_Request, _From, State) ->
     {reply, nomatch, State}.
 
