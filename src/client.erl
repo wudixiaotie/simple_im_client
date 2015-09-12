@@ -36,7 +36,7 @@ init([User]) ->
 
 
 handle_call(send_msg, _From, #state{user = User} = State) ->
-    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = \"", (User#user.id)/binary, "\" device = \"", (User#user.device)/binary, "\" [m.to] id = \"2\" device = \"@ipad\"">>,
+    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = \"", (User#user.id)/binary, "\" device = \"", (User#user.device)/binary, "\" [m.to] id = \"2\" device = \"ipad\"">>,
     Result = gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {reply, Result, State};
