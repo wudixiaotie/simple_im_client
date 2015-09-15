@@ -26,10 +26,10 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    User1 = #user{id = <<"1">>, device = <<"android">>},
-    % User2 = #user{id = <<"2">>, device = <<"ipad">>},
+    User1 = #user{phone = <<"18501260698">>, password = <<"888888">>, device = <<"android">>},
+    User2 = #user{phone = <<"13833665577">>, password = <<"888888">>, device = <<"ipad">>},
     {ok, Pid1} = supervisor:start_child(client_sup, [User1]),
-    % {ok, Pid2} = supervisor:start_child(client_sup, [User2]),
+    {ok, Pid2} = supervisor:start_child(client_sup, [User2]),
     % gen_server:call(Pid1, send_msg),
     {ok, []}.
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.

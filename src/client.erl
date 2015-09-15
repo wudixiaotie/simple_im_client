@@ -29,19 +29,21 @@ init([User]) ->
     {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
     % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
     State = #state{socket = Socket, user = User},
-    Msg = <<"[r] id = \"a_01\" c = \"login\" [r.user] id = \"", (User#user.id)/binary, "\" device = \"", (User#user.device)/binary, "\"">>,
+    Msg = <<"[r] id = \"a_01\" c = \"login\" [r.user] phone = \"", (User#user.phone)/binary,
+            "\" device = \"", (User#user.device)/binary,
+            "\" password = \"", (User#user.password)/binary, "\"">>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client login!~n"),
     {ok, State}.
 
 
 handle_call(send_msg, _From, #state{user = User} = State) ->
-    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = \"", (User#user.id)/binary, "\" device = \"", (User#user.device)/binary, "\" [m.to] id = \"2\" device = \"ipad\"">>,
+    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = ", (User#user.id)/binary, " device = \"", (User#user.device)/binary, "\" [m.to] id = 8 device = \"ipad\"">>,
     Result = gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {reply, Result, State};
 handle_call(send_group_msg, _From, #state{user = User} = State) ->
-    Msg = <<"[gm] id = \"a_03\" c = \"hello\" [gm.user] id = \"", (User#user.id)/binary, "\" device = \"", (User#user.device)/binary, "\" [gm.group] id = \"123\"">>,
+    Msg = <<"[gm] id = \"a_03\" c = \"hello\" [gm.user] id = ", (User#user.id)/binary, " device = \"", (User#user.device)/binary, "\" [gm.group] id = 3">>,
     Result = gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {reply, Result, State};
@@ -56,8 +58,16 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
     {ok, Toml} = etoml:parse(Data),
     case Toml of
         [{<<"rr">>, Attrs}] ->
-            {<<"c">>, Content} = lists:keyfind(<<"c">>, 1, Attrs),
-            io:format ("Login ~p~n", [Content]);
+            case lists:keyfind(<<"s">>, 1, Attrs) of
+                {<<"s">>, 0} ->
+                    {<<"user_id">>, UserId} = lists:keyfind(<<"user_id">>, 1, Attrs),
+                    io:format ("Login success, id is ~p~n", [UserId]);
+                {<<"s">>, 1} ->
+                    {<<"c">>, Reason} = lists:keyfind(<<"c">>, 1, Attrs),
+                    io:format ("Login failed, reason is ~p~n", [Reason]);
+                _ ->
+                    io:format ("Login Error~n")
+            end;
         [{<<"m">>, Attrs}] ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[a] id=\"", MsgId/binary, "\"">>,
