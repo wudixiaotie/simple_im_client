@@ -29,7 +29,7 @@ init([User]) ->
     {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
     % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
     State = #state{socket = Socket, user = User},
-    Msg = <<"[r] id = \"a_01\" c = \"login\" [r.user] phone = \"", (User#user.phone)/binary,
+    Msg = <<"[r] id = \"a_01\" t = \"login\" [r.user] phone = \"", (User#user.phone)/binary,
             "\" device = \"", (User#user.device)/binary,
             "\" password = \"", (User#user.password)/binary, "\"">>,
     gen_tcp:send(State#state.socket, Msg),
@@ -58,15 +58,30 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
     {ok, Toml} = etoml:parse(Data),
     case Toml of
         [{<<"rr">>, Attrs}] ->
-            case lists:keyfind(<<"s">>, 1, Attrs) of
-                {<<"s">>, 0} ->
-                    {<<"user_id">>, UserId} = lists:keyfind(<<"user_id">>, 1, Attrs),
-                    io:format ("Login success, id is ~p~n", [UserId]);
-                {<<"s">>, 1} ->
-                    {<<"c">>, Reason} = lists:keyfind(<<"c">>, 1, Attrs),
-                    io:format ("Login failed, reason is ~p~n", [Reason]);
-                _ ->
-                    io:format ("Login Error~n")
+            case lists:keyfind(<<"t">>, 1, Attrs) of
+                {<<"t">>, <<"login">>} ->
+                    case lists:keyfind(<<"s">>, 1, Attrs) of
+                        {<<"s">>, 0} ->
+                            {<<"user">>, UserInfo} = lists:keyfind(<<"user">>, 1, Attrs),
+                            {<<"id">>, UserId} = lists:keyfind(<<"id">>, 1, UserInfo),
+                            {<<"token">>, Token} = lists:keyfind(<<"token">>, 1, UserInfo),
+                            io:format ("Login success, id is ~p~n", [UserId]);
+                        {<<"s">>, 1} ->
+                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
+                            io:format ("Login failed, reason is ~p~n", [Reason]);
+                        _ ->
+                            io:format ("Login Error~n")
+                    end;
+                {<<"t">>, <<"reconnect">>} ->
+                    case lists:keyfind(<<"s">>, 1, Attrs) of
+                        {<<"s">>, 0} ->
+                            io:format ("reconnect success~n", []);
+                        {<<"s">>, 1} ->
+                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
+                            io:format ("reconnect failed, reason is ~p~n", [Reason]);
+                        _ ->
+                            io:format ("Login Error~n")
+                    end
             end;
         [{<<"m">>, Attrs}] ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
