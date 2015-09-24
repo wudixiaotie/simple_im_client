@@ -27,7 +27,6 @@ start_link(User) ->
 
 init([User]) ->
     {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
-    % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
     State = #state{socket = Socket, user = User},
     Msg = <<"[r] id = \"a_01\" t = \"login\" [r.user] phone = \"", (User#user.phone)/binary,
             "\" device = \"", (User#user.device)/binary,
@@ -65,7 +64,7 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
                             {<<"user">>, UserInfo} = lists:keyfind(<<"user">>, 1, Attrs),
                             {<<"id">>, UserId} = lists:keyfind(<<"id">>, 1, UserInfo),
                             {<<"token">>, Token} = lists:keyfind(<<"token">>, 1, UserInfo),
-                            io:format ("Login success, id is ~p~n", [UserId]);
+                            io:format ("Login success, id is ~p token is ~p~n", [UserId, Token]);
                         {<<"s">>, 1} ->
                             {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
                             io:format ("Login failed, reason is ~p~n", [Reason]);
