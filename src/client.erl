@@ -26,34 +26,48 @@ start_link(User) ->
 %% ===================================================================
 
 init([User]) ->
-    {ok, Socket} = gen_tcp:connect ("localhost", 1987, [{packet,0}, {active, true}]),
-    % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
-    State = #state{socket = Socket, user = User},
-    Msg = <<"[r] id = \"a_01\" t = \"login\" [r.user] phone = \"", (User#user.phone)/binary,
-            "\" device = \"", (User#user.device)/binary,
-            "\" password = \"", (User#user.password)/binary, "\"">>,
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("===client login!~n"),
-    {ok, State}.
+    Password = uri_encode(User#user.password),
+    Result = httpc:request(post,
+                  {"http://localhost:8080/server/login", [],
+                   "application/x-www-form-urlencoded",
+                   <<"phone=", (User#user.phone)/binary, "&password=", Password/binary>>},
+                  [], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = etoml:parse(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    {<<"server">>, ServerBin} = lists:keyfind(<<"server">>, 1, Attrs),
+                    {<<"port">>, PortBin} = lists:keyfind(<<"port">>, 1, Attrs),
+                    {<<"user">>, UserInfo} = lists:keyfind(<<"user">>, 1, Attrs),
+                    {<<"id">>, UserId} = lists:keyfind(<<"id">>, 1, UserInfo),
+                    {<<"token">>, Token} = lists:keyfind(<<"token">>, 1, UserInfo),
+                    NewUser = User#user{id = UserId, token = Token},
+                    UserIdBin = int_2_bin_str(UserId),
+                    Server = erlang:binary_to_list(ServerBin),
+                    Port = erlang:binary_to_integer(PortBin),
+                    io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
+                    {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
+                    % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
+                    State = #state{socket = Socket, user = NewUser},
+                    Msg = <<"[r] id = \"a_01\" t = \"login\" [r.user] id = \"", UserIdBin/binary,
+                            "\" device = \"", (NewUser#user.device)/binary,
+                            "\" token = \"", Token/binary, "\"">>,
+                    gen_tcp:send(State#state.socket, Msg),
+                    io:format ("===client login!~n"),
+                    {ok, State};
+                _ ->
+                   {stop, error}
+            end;
+        _ ->
+            {stop, error}
+    end.
 
 
-handle_call(send_msg, _From, #state{user = User} = State) ->
-    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = ", (User#user.id)/binary, " device = \"", (User#user.device)/binary, "\" [m.to] id = 8 device = \"ipad\"">>,
-    Result = gen_tcp:send(State#state.socket, Msg),
-    io:format ("===client send msg!~n"),
-    {reply, Result, State};
-handle_call(send_group_msg, _From, #state{user = User} = State) ->
-    Msg = <<"[gm] id = \"a_03\" c = \"hello\" [gm.user] id = ", (User#user.id)/binary, " device = \"", (User#user.device)/binary, "\" [gm.group] id = 3">>,
-    Result = gen_tcp:send(State#state.socket, Msg),
-    io:format ("===client send msg!~n"),
-    {reply, Result, State};
-handle_call(_Request, _From, State) ->
-    {reply, nomatch, State}.
-
-
+handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 
-handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
+handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) ->
     io:format ("~p===Got msg: ~p~n", [self(), Data]),
     {ok, Toml} = etoml:parse(Data),
     case Toml of
@@ -62,10 +76,7 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
                 {<<"t">>, <<"login">>} ->
                     case lists:keyfind(<<"s">>, 1, Attrs) of
                         {<<"s">>, 0} ->
-                            {<<"user">>, UserInfo} = lists:keyfind(<<"user">>, 1, Attrs),
-                            {<<"id">>, UserId} = lists:keyfind(<<"id">>, 1, UserInfo),
-                            {<<"token">>, Token} = lists:keyfind(<<"token">>, 1, UserInfo),
-                            io:format ("Login success, id is ~p~n", [UserId]);
+                            io:format ("Login success, id is ~p~n", [User#user.id]);
                         {<<"s">>, 1} ->
                             {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
                             io:format ("Login failed, reason is ~p~n", [Reason]);
@@ -93,8 +104,53 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
             io:format ("===Msg id=~p send success~n", [MsgId])
     end,
     {noreply, State};
-handle_info ({tcp_closed, _Socket}, State) ->
+handle_info ({tcp_closed, Socket}, #state{socket = Socket} = State) ->
     {stop, tcp_closed, State};
+handle_info(send_msg, #state{user = User} = State) ->
+    UserIdBin = int_2_bin_str(User#user.id),
+    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [m.to] id = 3">>,
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("===client send msg!~n"),
+    {noreply, State};
+handle_info(send_group_msg, #state{user = User} = State) ->
+    UserIdBin = int_2_bin_str(User#user.id),
+    Msg = <<"[gm] id = \"a_03\" c = \"hello\" [gm.user] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [gm.group] id = 3">>,
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("===client send msg!~n"),
+    {noreply, State};
+handle_info(reconnect, #state{user = User} = State) ->
+    UserIdBin = int_2_bin_str(User#user.id),
+    Token = uri_encode(User#user.token),
+    Result = httpc:request(post,
+                  {"http://localhost:8080/server/reconnect", [],
+                   "application/x-www-form-urlencoded",
+                   <<"id=", UserIdBin/binary, "&token=", Token/binary>>},
+                  [], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = etoml:parse(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    {<<"server">>, ServerBin} = lists:keyfind(<<"server">>, 1, Attrs),
+                    {<<"port">>, PortBin} = lists:keyfind(<<"port">>, 1, Attrs),
+                    Server = erlang:binary_to_list(ServerBin),
+                    Port = erlang:binary_to_integer(PortBin),
+                    io:format("~p reconnect to ~p:~p~n", [self(), Server, Port]),
+                    {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
+                    % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
+                    NewState = State#state{socket = Socket},
+                    Msg = <<"[r] id = \"a_04\" t = \"reconnect\" [r.user] id = ", UserIdBin/binary,
+                            " device = \"", (User#user.device)/binary,
+                            "\" token = \"", (User#user.token)/binary, "\"">>,
+                    gen_tcp:send(NewState#state.socket, Msg),
+                    io:format ("===client reconnect! ~p~n", [Token]),
+                    {noreply, NewState};
+                _ ->
+                   {stop, error, State}
+            end;
+        _ ->
+            {stop, error, State}
+    end;
 handle_info(_Info, State) -> {noreply, State}.
 
 
@@ -105,3 +161,17 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+int_2_bin_str(Integer) ->
+    erlang:list_to_binary(erlang:integer_to_list(Integer)).
+
+
+uri_encode(Uri) when is_binary(Uri) ->
+    erlang:list_to_binary(http_uri:encode(erlang:binary_to_list(Uri)));
+uri_encode(Uri) ->
+    erlang:list_to_binary(http_uri:encode(Uri)).
+
+
+% rd (user, {id, device, token, phone, password}).
+% User = #user{id = 1, token = <<"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M">>, device = <<"android1">>}
+% Msg = <<"[r] id = \"a_04\" t = \"reconnect\" [r.user] id = 1 device = \"android1\" token = \"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M\"">>,
