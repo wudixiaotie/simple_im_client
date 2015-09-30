@@ -60,6 +60,7 @@ init([User]) ->
                    {stop, error}
             end;
         _ ->
+            io:format("Can not connect to http server~n"),
             {stop, error}
     end.
 
