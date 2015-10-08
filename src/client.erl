@@ -34,7 +34,8 @@ init([User]) ->
                   [], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
-            {ok, [{<<"response">>, Attrs}]} = etoml:parse(Body),
+            BodyBin = erlang:list_to_binary(Body),
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(BodyBin),
             case lists:keyfind(<<"status">>, 1, Attrs) of
                 {<<"status">>, 0} ->
                     {<<"server">>, ServerBin} = lists:keyfind(<<"server">>, 1, Attrs),
@@ -43,14 +44,14 @@ init([User]) ->
                     {<<"id">>, UserId} = lists:keyfind(<<"id">>, 1, UserInfo),
                     {<<"token">>, Token} = lists:keyfind(<<"token">>, 1, UserInfo),
                     NewUser = User#user{id = UserId, token = Token},
-                    UserIdBin = int_2_bin_str(UserId),
+                    UserIdBin = erlang:integer_to_binary(UserId),
                     Server = erlang:binary_to_list(ServerBin),
                     Port = erlang:binary_to_integer(PortBin),
                     io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
                     {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
                     % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
                     State = #state{socket = Socket, user = NewUser},
-                    Msg = <<"[r] id = \"a_01\" t = \"login\" [r.user] id = \"", UserIdBin/binary,
+                    Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = \"", UserIdBin/binary,
                             "\" device = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
                     gen_tcp:send(State#state.socket, Msg),
@@ -70,7 +71,7 @@ handle_cast(_Msg, State) -> {noreply, State}.
 
 handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) ->
     io:format ("~p===Got msg: ~p~n", [self(), Data]),
-    {ok, Toml} = etoml:parse(Data),
+    {ok, Toml} = toml:binary_2_term(Data),
     case Toml of
         [{<<"rr">>, Attrs}] ->
             case lists:keyfind(<<"t">>, 1, Attrs) of
@@ -97,7 +98,7 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) 
             end;
         [{<<"m">>, Attrs}] ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[a] id=\"", MsgId/binary, "\"">>,
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
             gen_tcp:send(Socket, Ack);
         [{<<"a">>, Attrs}] ->
@@ -108,19 +109,19 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) 
 handle_info ({tcp_closed, Socket}, #state{socket = Socket} = State) ->
     {stop, tcp_closed, State};
 handle_info(send_msg, #state{user = User} = State) ->
-    UserIdBin = int_2_bin_str(User#user.id),
-    Msg = <<"[m] id = \"a_02\" c = \"hello\" [m.from] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [m.to] id = 3">>,
+    UserIdBin = erlang:integer_to_binary(User#user.id),
+    Msg = <<"[[m]] id = \"a_02\" c = \"hello\" [m.from] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [m.to] id = 3">>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
 handle_info(send_group_msg, #state{user = User} = State) ->
-    UserIdBin = int_2_bin_str(User#user.id),
-    Msg = <<"[gm] id = \"a_03\" c = \"hello\" [gm.user] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [gm.group] id = 3">>,
+    UserIdBin = erlang:integer_to_binary(User#user.id),
+    Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" [gm.user] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [gm.group] id = 3">>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
 handle_info(reconnect, #state{user = User} = State) ->
-    UserIdBin = int_2_bin_str(User#user.id),
+    UserIdBin = erlang:integer_to_binary(User#user.id),
     Token = uri_encode(User#user.token),
     Result = httpc:request(post,
                   {"http://localhost:8080/server/reconnect", [],
@@ -129,7 +130,8 @@ handle_info(reconnect, #state{user = User} = State) ->
                   [], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
-            {ok, [{<<"response">>, Attrs}]} = etoml:parse(Body),
+            BodyBin = erlang:list_to_binary(Body),
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(BodyBin),
             case lists:keyfind(<<"status">>, 1, Attrs) of
                 {<<"status">>, 0} ->
                     {<<"server">>, ServerBin} = lists:keyfind(<<"server">>, 1, Attrs),
@@ -140,7 +142,7 @@ handle_info(reconnect, #state{user = User} = State) ->
                     {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
                     % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
                     NewState = State#state{socket = Socket},
-                    Msg = <<"[r] id = \"a_04\" t = \"reconnect\" [r.user] id = ", UserIdBin/binary,
+                    Msg = <<"[[r]] id = \"a_04\" t = \"reconnect\" [r.user] id = ", UserIdBin/binary,
                             " device = \"", (User#user.device)/binary,
                             "\" token = \"", (User#user.token)/binary, "\"">>,
                     gen_tcp:send(NewState#state.socket, Msg),
@@ -163,10 +165,6 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% Internal functions
 %% ===================================================================
 
-int_2_bin_str(Integer) ->
-    erlang:list_to_binary(erlang:integer_to_list(Integer)).
-
-
 uri_encode(Uri) when is_binary(Uri) ->
     erlang:list_to_binary(http_uri:encode(erlang:binary_to_list(Uri)));
 uri_encode(Uri) ->
@@ -175,4 +173,4 @@ uri_encode(Uri) ->
 
 % rd (user, {id, device, token, phone, password}).
 % User = #user{id = 1, token = <<"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M">>, device = <<"android1">>}
-% Msg = <<"[r] id = \"a_04\" t = \"reconnect\" [r.user] id = 1 device = \"android1\" token = \"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M\"">>,
+% Msg = <<"[[r]] id = \"a_04\" t = \"reconnect\" [r.user] id = 1 device = \"android1\" token = \"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M\"">>,
