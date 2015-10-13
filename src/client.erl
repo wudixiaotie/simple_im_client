@@ -34,8 +34,7 @@ init([User]) ->
                   [], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
-            BodyBin = erlang:list_to_binary(Body),
-            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(BodyBin),
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
             case lists:keyfind(<<"status">>, 1, Attrs) of
                 {<<"status">>, 0} ->
                     {<<"server">>, ServerBin} = lists:keyfind(<<"server">>, 1, Attrs),
@@ -49,7 +48,6 @@ init([User]) ->
                     Port = erlang:binary_to_integer(PortBin),
                     io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
                     {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
-                    % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
                     State = #state{socket = Socket, user = NewUser},
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = \"", UserIdBin/binary,
                             "\" device = \"", (NewUser#user.device)/binary,
@@ -78,7 +76,9 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) 
                 {<<"t">>, <<"login">>} ->
                     case lists:keyfind(<<"s">>, 1, Attrs) of
                         {<<"s">>, 0} ->
-                            io:format ("Login success, id is ~p~n", [User#user.id]);
+                            io:format ("Login success, id is ~p~n", [User#user.id]),
+                            {ok, MsgList} = get_offline_msg(User#user.token),
+                            io:format("==Got offline msg lists ~p~n", [MsgList]);
                         {<<"s">>, 1} ->
                             {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
                             io:format ("Login failed, reason is ~p~n", [Reason]);
@@ -103,6 +103,8 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) 
             gen_tcp:send(Socket, Ack);
         [{<<"a">>, Attrs}] ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            % send ack back
+            gen_tcp:send(Socket, Data),
             io:format ("===Msg id=~p send success~n", [MsgId])
     end,
     {noreply, State};
@@ -170,7 +172,25 @@ uri_encode(Uri) when is_binary(Uri) ->
 uri_encode(Uri) ->
     erlang:list_to_binary(http_uri:encode(Uri)).
 
-
-% rd (user, {id, device, token, phone, password}).
-% User = #user{id = 1, token = <<"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M">>, device = <<"android1">>}
-% Msg = <<"[[r]] id = \"a_04\" t = \"reconnect\" [r.user] id = 1 device = \"android1\" token = \"VGSRyk8XHgntILQcEHW%2FFNXz9vW4BZ6M\"">>,
+get_offline_msg(Token) ->
+    TokenEncode = uri_encode(Token),
+    Result = httpc:request(post,
+                  {"http://localhost:8080/offline", [],
+                   "application/x-www-form-urlencoded",
+                   <<"token=", (TokenEncode)/binary>>},
+                  [], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, Response} = toml:binary_2_term(Body),
+            {<<"response">>,Attrs} = lists:keyfind(<<"response">>, 1, Response),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    MsgList = lists:keydelete(<<"response">>, 1, Response),
+                    {ok, MsgList};
+                _ ->
+                   {stop, http_request_failed}
+            end;
+        _ ->
+            io:format("Can not connect to http server~n"),
+            {stop, http_connect_failed}
+    end.
