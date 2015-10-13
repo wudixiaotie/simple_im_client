@@ -58,11 +58,11 @@ init([User]) ->
                     io:format ("===client login!~n"),
                     {ok, State};
                 _ ->
-                   {stop, error}
+                   {stop, http_request_failed}
             end;
         _ ->
             io:format("Can not connect to http server~n"),
-            {stop, error}
+            {stop, http_connect_failed}
     end.
 
 

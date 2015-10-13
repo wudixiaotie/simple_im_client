@@ -28,7 +28,7 @@ start_link() ->
 init([]) ->
     inets:start(),
     User1 = #user{phone = <<"18501260698">>, password = <<"888888">>, device = <<"android">>},
-    User2 = #user{phone = <<"13833665577">>, password = <<"888888">>, device = <<"ipad">>},
+    User2 = #user{phone = <<"18501260693">>, password = <<"888888">>, device = <<"ipad">>},
     {ok, Pid1} = supervisor:start_child(client_sup, [User1]),
     % {ok, Pid2} = supervisor:start_child(client_sup, [User2]),
     % gen_server:call(Pid1, send_msg),
