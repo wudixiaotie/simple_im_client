@@ -175,7 +175,7 @@ uri_encode(Uri) ->
 get_offline_msg(Token) ->
     TokenEncode = uri_encode(Token),
     Result = httpc:request(post,
-                  {"http://localhost:8080/offline", [],
+                  {"http://localhost:8080/offline/get", [],
                    "application/x-www-form-urlencoded",
                    <<"token=", (TokenEncode)/binary>>},
                   [], []),
@@ -186,6 +186,11 @@ get_offline_msg(Token) ->
             case lists:keyfind(<<"status">>, 1, Attrs) of
                 {<<"status">>, 0} ->
                     MsgList = lists:keydelete(<<"response">>, 1, Response),
+                    httpc:request(post,
+                                  {"http://localhost:8080/offline/clean", [],
+                                   "application/x-www-form-urlencoded",
+                                   <<"token=", (TokenEncode)/binary>>},
+                                  [], []),
                     {ok, MsgList};
                 _ ->
                    {stop, http_request_failed}
