@@ -67,57 +67,17 @@ init([User]) ->
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 
-handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) ->
+handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
     io:format ("~p===Got msg: ~p~n", [self(), Data]),
-    {ok, Toml} = toml:binary_2_term(Data),
-    case Toml of
-        [{<<"rr">>, Attrs}] ->
-            case lists:keyfind(<<"t">>, 1, Attrs) of
-                {<<"t">>, <<"login">>} ->
-                    case lists:keyfind(<<"s">>, 1, Attrs) of
-                        {<<"s">>, 0} ->
-                            io:format ("Login success, id is ~p~n", [User#user.id]),
-                            {ok, MsgList} = get_offline_msg(User#user.token),
-                            io:format("==Got offline msg lists ~p~n", [MsgList]);
-                        {<<"s">>, 1} ->
-                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
-                            io:format ("Login failed, reason is ~p~n", [Reason]);
-                        _ ->
-                            io:format ("Login Error~n")
-                    end;
-                {<<"t">>, <<"reconnect">>} ->
-                    case lists:keyfind(<<"s">>, 1, Attrs) of
-                        {<<"s">>, 0} ->
-                            io:format ("reconnect success~n", []);
-                        {<<"s">>, 1} ->
-                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
-                            io:format ("reconnect failed, reason is ~p~n", [Reason]);
-                        _ ->
-                            io:format ("Login Error~n")
-                    end;
-                _ ->
-                    ok
-            end;
-        [{<<"m">>, Attrs}] ->
-            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
-            io:format ("===Send ack: ~p~n", [Ack]),
-            gen_tcp:send(Socket, Ack);
-        [{<<"a">>, Attrs}] ->
-            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            % send ack back
-            gen_tcp:send(Socket, Data),
-            io:format ("===Msg id=~p send success~n", [MsgId]);
-        _ ->
-            ok
-    end,
+    {ok, TomlList} = toml:binary_2_term(Data),
+    process_package(TomlList, State),
     {noreply, State};
 handle_info ({tcp_closed, Socket}, #state{socket = Socket} = State) ->
     {stop, tcp_closed, State};
 handle_info(send_msg, State) ->
     Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = 3">>,
     gen_tcp:send(State#state.socket, Msg),
-    io:format ("===client send msg!~n"),
+    io:format ("~p client send msg!~n", [self()]),
     {noreply, State};
 handle_info(send_group_msg, State) ->
     Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" group = 3">>,
@@ -158,17 +118,35 @@ handle_info(reconnect, #state{user = User} = State) ->
         _ ->
             {stop, error, State}
     end;
+handle_info({search_user, Phone}, State) ->
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    Result = httpc:request(get,
+                           {"http://localhost:8080/user/phone/" ++ Phone, [{"Cookie", "token=" ++ TokenStr}]},
+                           [], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            io:format("~p Got user: ~p~n", [self(), Body]);
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
+    {noreply, State};
 handle_info({add_friend, Id}, State) ->
     IdBin = erlang:integer_to_binary(Id),
     Msg = <<"[[r]] id = \"a_12344\" t = \"add_contact\" message = \"fuck you\" to = ", IdBin/binary>>,
     gen_tcp:send(State#state.socket, Msg),
-    io:format ("===client send r!~n"),
+    io:format ("~p client send r!~n", [self()]),
     {noreply, State};
 handle_info({accept_friend, Id}, State) ->
     IdBin = erlang:integer_to_binary(Id),
     Msg = <<"[[r]] id = \"a_12345\" t = \"accept_contact\" to = ", IdBin/binary>>,
     gen_tcp:send(State#state.socket, Msg),
-    io:format ("===client send r!~n"),
+    io:format ("~p client send r!~n", [self()]),
+    {noreply, State};
+handle_info({delete_friend, Id}, State) ->
+    IdBin = erlang:integer_to_binary(Id),
+    Msg = <<"[[r]] id = \"a_12346\" t = \"delete_contact\" to = ", IdBin/binary>>,
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("~p client send r!~n", [self()]),
     {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
@@ -209,3 +187,55 @@ get_offline_msg(Token) ->
             io:format("Can not connect to http server~n"),
             {stop, http_connect_failed}
     end.
+
+
+process_package([H|T], #state{socket = Socket, user = User} = State) ->
+    case H of
+        [{<<"rr">>, Attrs}] ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
+            io:format ("===Send ack: ~p~n", [Ack]),
+            gen_tcp:send(Socket, Ack),
+            case lists:keyfind(<<"t">>, 1, Attrs) of
+                {<<"t">>, <<"login">>} ->
+                    case lists:keyfind(<<"s">>, 1, Attrs) of
+                        {<<"s">>, 0} ->
+                            io:format ("~p Login success, id is ~p~n", [self(), User#user.id]),
+                            {ok, MsgList} = get_offline_msg(User#user.token),
+                            io:format("~p Got offline msg lists ~p~n", [self(), MsgList]);
+                        {<<"s">>, 1} ->
+                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
+                            io:format ("~p Login failed, reason is ~p~n", [self(), Reason]);
+                        _ ->
+                            io:format ("Login Error~n")
+                    end;
+                {<<"t">>, <<"reconnect">>} ->
+                    case lists:keyfind(<<"s">>, 1, Attrs) of
+                        {<<"s">>, 0} ->
+                            io:format ("~p reconnect success~n", [self()]);
+                        {<<"s">>, 1} ->
+                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
+                            io:format ("~p reconnect failed, reason is ~p~n", [self(), Reason]);
+                        _ ->
+                            io:format ("~p Login Error~n", [self()])
+                    end;
+                _ ->
+                    ok
+            end;
+        [{<<"m">>, Attrs}] ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
+            io:format ("~p Send ack: ~p~n", [self(), Ack]),
+            gen_tcp:send(Socket, Ack);
+        [{<<"a">>, Attrs}] ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Data = toml:term_2_binary({<<"a">>, Attrs}),
+            % send ack back
+            gen_tcp:send(Socket, Data),
+            io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
+        _ ->
+            ok
+    end,
+    process_package(T, State);
+process_package([], _) ->
+    ok.
