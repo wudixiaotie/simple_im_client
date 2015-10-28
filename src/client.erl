@@ -94,7 +94,9 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) 
                             io:format ("reconnect failed, reason is ~p~n", [Reason]);
                         _ ->
                             io:format ("Login Error~n")
-                    end
+                    end;
+                _ ->
+                    ok
             end;
         [{<<"m">>, Attrs}] ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
@@ -105,31 +107,31 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket, user = User} = State) 
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             % send ack back
             gen_tcp:send(Socket, Data),
-            io:format ("===Msg id=~p send success~n", [MsgId])
+            io:format ("===Msg id=~p send success~n", [MsgId]);
+        _ ->
+            ok
     end,
     {noreply, State};
 handle_info ({tcp_closed, Socket}, #state{socket = Socket} = State) ->
     {stop, tcp_closed, State};
-handle_info(send_msg, #state{user = User} = State) ->
-    UserIdBin = erlang:integer_to_binary(User#user.id),
-    Msg = <<"[[m]] id = \"a_02\" c = \"hello\" [m.from] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [m.to] id = 3">>,
+handle_info(send_msg, State) ->
+    Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = 3">>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
-handle_info(send_group_msg, #state{user = User} = State) ->
-    UserIdBin = erlang:integer_to_binary(User#user.id),
-    Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" [gm.user] id = ", UserIdBin/binary, " device = \"", (User#user.device)/binary, "\" [gm.group] id = 3">>,
+handle_info(send_group_msg, State) ->
+    Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" group = 3">>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
 handle_info(reconnect, #state{user = User} = State) ->
     UserIdBin = erlang:integer_to_binary(User#user.id),
-    Token = uri_encode(User#user.token),
+    TokenStr = erlang:binary_to_list(User#user.token),
     Result = httpc:request(post,
-                  {"http://localhost:8080/server/reconnect", [],
-                   "application/x-www-form-urlencoded",
-                   <<"id=", UserIdBin/binary, "&token=", Token/binary>>},
-                  [], []),
+                          {"http://localhost:8080/server/reconnect", [{"Cookie", "token=" ++ TokenStr}],
+                           "application/x-www-form-urlencoded",
+                           <<"id=", UserIdBin/binary>>},
+                          [], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             BodyBin = erlang:list_to_binary(Body),
@@ -148,7 +150,7 @@ handle_info(reconnect, #state{user = User} = State) ->
                             " device = \"", (User#user.device)/binary,
                             "\" token = \"", (User#user.token)/binary, "\"">>,
                     gen_tcp:send(NewState#state.socket, Msg),
-                    io:format ("===client reconnect! ~p~n", [Token]),
+                    io:format ("===client reconnect! ~p~n", [TokenStr]),
                     {noreply, NewState};
                 _ ->
                    {stop, error, State}
@@ -156,6 +158,18 @@ handle_info(reconnect, #state{user = User} = State) ->
         _ ->
             {stop, error, State}
     end;
+handle_info({add_friend, Id}, State) ->
+    IdBin = erlang:integer_to_binary(Id),
+    Msg = <<"[[r]] id = \"a_12344\" t = \"add_contact\" message = \"fuck you\" to = ", IdBin/binary>>,
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("===client send r!~n"),
+    {noreply, State};
+handle_info({accept_friend, Id}, State) ->
+    IdBin = erlang:integer_to_binary(Id),
+    Msg = <<"[[r]] id = \"a_12345\" t = \"accept_contact\" to = ", IdBin/binary>>,
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("===client send r!~n"),
+    {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
 
@@ -173,12 +187,10 @@ uri_encode(Uri) ->
     erlang:list_to_binary(http_uri:encode(Uri)).
 
 get_offline_msg(Token) ->
-    TokenEncode = uri_encode(Token),
+    TokenStr = erlang:binary_to_list(Token),
     Result = httpc:request(get,
-                  {"http://localhost:8080/offline", [],
-                   "application/x-www-form-urlencoded",
-                   <<"token=", (TokenEncode)/binary>>},
-                  [], []),
+                           {"http://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
+                           [], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             {ok, Response} = toml:binary_2_term(Body),
@@ -187,9 +199,7 @@ get_offline_msg(Token) ->
                 {<<"status">>, 0} ->
                     MsgList = lists:keydelete(<<"response">>, 1, Response),
                     httpc:request(delete,
-                                  {"http://localhost:8080/offline", [],
-                                   "application/x-www-form-urlencoded",
-                                   <<"token=", (TokenEncode)/binary>>},
+                                  {"http://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
                                   [], []),
                     {ok, MsgList};
                 _ ->
