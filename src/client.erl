@@ -148,6 +148,15 @@ handle_info({delete_friend, Id}, State) ->
     gen_tcp:send(State#state.socket, Msg),
     io:format ("~p client send r!~n", [self()]),
     {noreply, State};
+handle_info({create_group, Members}, State) ->
+    {ok, Msg} = toml:term_2_binary({<<"r">>,
+                                    [{<<"members">>,Members},
+                                     {<<"name">>,<<"fuck">>},
+                                     {<<"t">>,<<"create_group">>},
+                                     {<<"id">>,<<"c_01">>}]}),
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("~p client send r!~n", [self()]),
+    {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
 
@@ -191,11 +200,7 @@ get_offline_msg(Token) ->
 
 process_package([H|T], #state{socket = Socket, user = User} = State) ->
     case H of
-        [{<<"rr">>, Attrs}] ->
-            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
-            io:format ("===Send ack: ~p~n", [Ack]),
-            gen_tcp:send(Socket, Ack),
+        {<<"rr">>, Attrs} ->
             case lists:keyfind(<<"t">>, 1, Attrs) of
                 {<<"t">>, <<"login">>} ->
                     case lists:keyfind(<<"s">>, 1, Attrs) of
@@ -220,20 +225,26 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
                             io:format ("~p Login Error~n", [self()])
                     end;
                 _ ->
+                    {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+                    Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
+                    io:format ("===Send ack: ~p~n", [Ack]),
+                    gen_tcp:send(Socket, Ack),
+                    io:format("~p Unkown response~n", [self()]),
                     ok
             end;
-        [{<<"m">>, Attrs}] ->
+        {<<"m">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("~p Send ack: ~p~n", [self(), Ack]),
             gen_tcp:send(Socket, Ack);
-        [{<<"a">>, Attrs}] ->
+        {<<"a">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Data = toml:term_2_binary({<<"a">>, Attrs}),
             % send ack back
             gen_tcp:send(Socket, Data),
             io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
         _ ->
+            io:format("~p Unkown message: ~p~n", [self(), H]),
             ok
     end,
     process_package(T, State);
