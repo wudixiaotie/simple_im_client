@@ -74,8 +74,9 @@ handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
     {noreply, State};
 handle_info ({tcp_closed, Socket}, #state{socket = Socket} = State) ->
     {stop, tcp_closed, State};
-handle_info(send_msg, State) ->
-    Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = 3">>,
+handle_info({send_msg, UserId}, State) ->
+    UserIdBin = erlang:integer_to_binary(UserId),
+    Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = ", UserIdBin/binary>>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("~p client send msg!~n", [self()]),
     {noreply, State};
@@ -153,6 +154,14 @@ handle_info({create_group, Members}, State) ->
                                     [{<<"members">>,Members},
                                      {<<"name">>,<<"fuck">>},
                                      {<<"t">>,<<"create_group">>},
+                                     {<<"id">>,<<"c_01">>}]}),
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("~p client send r!~n", [self()]),
+    {noreply, State};
+handle_info({delete_group, GroupId}, State) ->
+    {ok, Msg} = toml:term_2_binary({<<"r">>,
+                                    [{<<"group_id">>,GroupId},
+                                     {<<"t">>,<<"delete_group">>},
                                      {<<"id">>,<<"c_01">>}]}),
     gen_tcp:send(State#state.socket, Msg),
     io:format ("~p client send r!~n", [self()]),
@@ -239,10 +248,16 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
             gen_tcp:send(Socket, Ack);
         {<<"a">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Data = toml:term_2_binary({<<"a">>, Attrs}),
+            {ok, Ack} = toml:term_2_binary({<<"a">>, Attrs}),
             % send ack back
-            gen_tcp:send(Socket, Data),
+            gen_tcp:send(Socket, Ack),
             io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
+        {<<"r">>, Attrs} ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
+            io:format ("===Send ack: ~p~n", [Ack]),
+            gen_tcp:send(Socket, Ack),
+            io:format("~p Got request: ~p~n", [self(), {<<"r">>, Attrs}]);
         _ ->
             io:format("~p Unkown message: ~p~n", [self(), H]),
             ok
