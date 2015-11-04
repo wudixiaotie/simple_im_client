@@ -49,8 +49,8 @@ init([User]) ->
                     io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
                     {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
                     State = #state{socket = Socket, user = NewUser},
-                    Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = \"", UserIdBin/binary,
-                            "\" device = \"", (NewUser#user.device)/binary,
+                    Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
+                            " device = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
                     gen_tcp:send(State#state.socket, Msg),
                     io:format ("===client login!~n"),
@@ -85,40 +85,6 @@ handle_info(send_group_msg, State) ->
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
-handle_info(reconnect, #state{user = User} = State) ->
-    UserIdBin = erlang:integer_to_binary(User#user.id),
-    TokenStr = erlang:binary_to_list(User#user.token),
-    Result = httpc:request(post,
-                          {"http://localhost:8080/server/reconnect", [{"Cookie", "token=" ++ TokenStr}],
-                           "application/x-www-form-urlencoded",
-                           <<"id=", UserIdBin/binary>>},
-                          [], []),
-    case Result of
-        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
-            BodyBin = erlang:list_to_binary(Body),
-            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(BodyBin),
-            case lists:keyfind(<<"status">>, 1, Attrs) of
-                {<<"status">>, 0} ->
-                    {<<"server">>, ServerBin} = lists:keyfind(<<"server">>, 1, Attrs),
-                    {<<"port">>, PortBin} = lists:keyfind(<<"port">>, 1, Attrs),
-                    Server = erlang:binary_to_list(ServerBin),
-                    Port = erlang:binary_to_integer(PortBin),
-                    io:format("~p reconnect to ~p:~p~n", [self(), Server, Port]),
-                    {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
-                    % {ok, Socket} = gen_tcp:connect ("192.168.1.137", 1987, [{packet,0}, {active, true}]),
-                    NewState = State#state{socket = Socket},
-                    Msg = <<"[[r]] id = \"a_04\" t = \"reconnect\" [r.user] id = ", UserIdBin/binary,
-                            " device = \"", (User#user.device)/binary,
-                            "\" token = \"", (User#user.token)/binary, "\"">>,
-                    gen_tcp:send(NewState#state.socket, Msg),
-                    io:format ("===client reconnect! ~p~n", [TokenStr]),
-                    {noreply, NewState};
-                _ ->
-                   {stop, error, State}
-            end;
-        _ ->
-            {stop, error, State}
-    end;
 handle_info({search_user, Phone}, State) ->
     TokenStr = erlang:binary_to_list(State#state.user#user.token),
     Result = httpc:request(get,
@@ -210,8 +176,8 @@ get_offline_msg(Token) ->
 process_package([H|T], #state{socket = Socket, user = User} = State) ->
     case H of
         {<<"rr">>, Attrs} ->
-            case lists:keyfind(<<"t">>, 1, Attrs) of
-                {<<"t">>, <<"login">>} ->
+            case lists:keyfind(<<"id">>, 1, Attrs) of
+                {<<"id">>, <<"abc_01">>} ->
                     case lists:keyfind(<<"s">>, 1, Attrs) of
                         {<<"s">>, 0} ->
                             io:format ("~p Login success, id is ~p~n", [self(), User#user.id]),
@@ -222,16 +188,6 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
                             io:format ("~p Login failed, reason is ~p~n", [self(), Reason]);
                         _ ->
                             io:format ("Login Error~n")
-                    end;
-                {<<"t">>, <<"reconnect">>} ->
-                    case lists:keyfind(<<"s">>, 1, Attrs) of
-                        {<<"s">>, 0} ->
-                            io:format ("~p reconnect success~n", [self()]);
-                        {<<"s">>, 1} ->
-                            {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
-                            io:format ("~p reconnect failed, reason is ~p~n", [self(), Reason]);
-                        _ ->
-                            io:format ("~p Login Error~n", [self()])
                     end;
                 _ ->
                     {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
