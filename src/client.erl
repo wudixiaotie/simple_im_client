@@ -68,7 +68,7 @@ handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 
 handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
-    io:format ("~p===Got msg: ~p~n", [self(), Data]),
+    io:format ("~p===Got msg(~p): ~p~n", [self(), os:timestamp(), Data]),
     {ok, TomlList} = toml:binary_2_term(Data),
     process_package(TomlList, State),
     {noreply, State};
@@ -78,10 +78,11 @@ handle_info({send_msg, UserId}, State) ->
     UserIdBin = erlang:integer_to_binary(UserId),
     Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = ", UserIdBin/binary>>,
     gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send msg!~n", [self()]),
+    io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
     {noreply, State};
-handle_info(send_group_msg, State) ->
-    Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" group = 3">>,
+handle_info({send_group_msg, GroupId}, State) ->
+    GroupIdBin = erlang:integer_to_binary(GroupId),
+    Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" group = ", GroupIdBin/binary>>,
     gen_tcp:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
@@ -117,7 +118,7 @@ handle_info({delete_friend, Id}, State) ->
     {noreply, State};
 handle_info({create_group, Members}, State) ->
     {ok, Msg} = toml:term_2_binary({<<"r">>,
-                                    [{<<"members">>,Members},
+                                    [{<<"members">>,[State#state.user#user.id|Members]},
                                      {<<"name">>,<<"fuck">>},
                                      {<<"t">>,<<"create_group">>},
                                      {<<"id">>,<<"c_01">>}]}),
@@ -202,11 +203,16 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
             Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("~p Send ack: ~p~n", [self(), Ack]),
             gen_tcp:send(Socket, Ack);
+        {<<"gm">>, Attrs} ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
+            io:format ("~p Send ack: ~p~n", [self(), Ack]),
+            gen_tcp:send(Socket, Ack);
         {<<"a">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            {ok, Ack} = toml:term_2_binary({<<"a">>, Attrs}),
+            {ok, AckBin} = toml:term_2_binary({<<"a">>, Attrs}),
             % send ack back
-            gen_tcp:send(Socket, Ack),
+            gen_tcp:send(Socket, AckBin),
             io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
         {<<"r">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
