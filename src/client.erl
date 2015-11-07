@@ -133,6 +133,23 @@ handle_info({delete_group, GroupId}, State) ->
     gen_tcp:send(State#state.socket, Msg),
     io:format ("~p client send r!~n", [self()]),
     {noreply, State};
+handle_info({create_group_member, GroupId, Key}, State) ->
+    {ok, Msg} = toml:term_2_binary({<<"r">>,
+                                    [{<<"group_id">>,GroupId},
+                                     {<<"key">>,Key},
+                                     {<<"t">>,<<"create_group_member">>},
+                                     {<<"id">>,<<"d_01">>}]}),
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("~p client send r!~n", [self()]),
+    {noreply, State};
+handle_info({delete_group_member, GroupId}, State) ->
+    {ok, Msg} = toml:term_2_binary({<<"r">>,
+                                    [{<<"group_id">>,GroupId},
+                                     {<<"t">>,<<"delete_group_member">>},
+                                     {<<"id">>,<<"d_01">>}]}),
+    gen_tcp:send(State#state.socket, Msg),
+    io:format ("~p client send r!~n", [self()]),
+    {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
 
