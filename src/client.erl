@@ -49,11 +49,12 @@ init([User]) ->
                     io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
                     {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
                     State = #state{socket = Socket, user = NewUser},
+                    ok = server_ready(Socket),
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
                             " device = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
                     gen_tcp:send(State#state.socket, Msg),
-                    io:format ("===client login!~n"),
+                    io:format ("~p===client login!~n", [self()]),
                     {ok, State};
                 _ ->
                    {stop, http_request_failed}
@@ -165,6 +166,17 @@ uri_encode(Uri) when is_binary(Uri) ->
     erlang:list_to_binary(http_uri:encode(erlang:binary_to_list(Uri)));
 uri_encode(Uri) ->
     erlang:list_to_binary(http_uri:encode(Uri)).
+
+
+server_ready(Socket) ->
+    receive
+        {tcp, Socket, "ready"} ->
+            ok
+    after
+        1000 ->
+            io:format("Fuck, Server is down!~n"),
+            error
+    end.
 
 get_offline_msg(Token) ->
     TokenStr = erlang:binary_to_list(Token),
