@@ -27,6 +27,7 @@ start_link() ->
 
 init([]) ->
     inets:start(),
+    ssl:start(),
     User1 = #user{phone = <<"18501260698">>, password = <<"888888">>, device = <<"android">>},
     User2 = #user{phone = <<"18501260698">>, password = <<"888888">>, device = <<"ipad">>},
     User3 = #user{phone = <<"18501260693">>, password = <<"888888">>, device = <<"ipad">>},

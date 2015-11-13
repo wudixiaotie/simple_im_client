@@ -28,10 +28,10 @@ start_link(User) ->
 init([User]) ->
     Password = uri_encode(User#user.password),
     Result = httpc:request(post,
-                  {"http://localhost:8080/server/login", [],
+                  {"https://localhost:8080/server/login", [],
                    "application/x-www-form-urlencoded",
                    <<"phone=", (User#user.phone)/binary, "&password=", Password/binary>>},
-                  [], []),
+                  [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
@@ -90,8 +90,8 @@ handle_info({send_group_msg, GroupId}, State) ->
 handle_info({search_user, Phone}, State) ->
     TokenStr = erlang:binary_to_list(State#state.user#user.token),
     Result = httpc:request(get,
-                           {"http://localhost:8080/user/phone/" ++ Phone, [{"Cookie", "token=" ++ TokenStr}]},
-                           [], []),
+                           {"https://localhost:8080/user/phone/" ++ Phone, [{"Cookie", "token=" ++ TokenStr}]},
+                           [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             io:format("~p Got user: ~p~n", [self(), Body]);
@@ -181,8 +181,8 @@ server_ready(Socket) ->
 get_offline_msg(Token) ->
     TokenStr = erlang:binary_to_list(Token),
     Result = httpc:request(get,
-                           {"http://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
-                           [], []),
+                           {"https://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
+                           [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             {ok, Response} = toml:binary_2_term(Body),
@@ -191,8 +191,8 @@ get_offline_msg(Token) ->
                 {<<"status">>, 0} ->
                     MsgList = lists:keydelete(<<"response">>, 1, Response),
                     httpc:request(delete,
-                                  {"http://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
-                                  [], []),
+                                  {"https://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
+                                  [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
                     {ok, MsgList};
                 _ ->
                    {stop, http_request_failed}
