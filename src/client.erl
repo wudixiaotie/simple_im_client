@@ -10,6 +10,7 @@
           terminate/2, code_change/3]).
 
 -record (state, {socket, user}).
+-compile (export_all).
 
 -include ("user.hrl").
 
@@ -31,7 +32,7 @@ init([User]) ->
                   {"https://localhost:8080/server/login", [],
                    "application/x-www-form-urlencoded",
                    <<"phone=", (User#user.phone)/binary, "&password=", Password/binary>>},
-                  [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
+                  [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
@@ -91,7 +92,7 @@ handle_info({search_user, Phone}, State) ->
     TokenStr = erlang:binary_to_list(State#state.user#user.token),
     Result = httpc:request(get,
                            {"https://localhost:8080/user/phone/" ++ Phone, [{"Cookie", "token=" ++ TokenStr}]},
-                           [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             io:format("~p Got user: ~p~n", [self(), Body]);
@@ -182,17 +183,19 @@ get_offline_msg(Token) ->
     TokenStr = erlang:binary_to_list(Token),
     Result = httpc:request(get,
                            {"https://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
-                           [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
-            {ok, Response} = toml:binary_2_term(Body),
+            [ResponseBin, ZippedData] = re:split(Body, "\r\n"),
+            {ok, Response} = toml:binary_2_term(ResponseBin),
             {<<"response">>,Attrs} = lists:keyfind(<<"response">>, 1, Response),
             case lists:keyfind(<<"status">>, 1, Attrs) of
                 {<<"status">>, 0} ->
-                    MsgList = lists:keydelete(<<"response">>, 1, Response),
+                    MsgListBin = zlib:unzip(ZippedData),
+                    {ok, MsgList} = toml:binary_2_term(MsgListBin),
                     httpc:request(delete,
                                   {"https://localhost:8080/offline", [{"Cookie", "token=" ++ TokenStr}]},
-                                  [{ssl, [{cacertfile, "priv/cowboy-ca.crt"}]}], []),
+                                  [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
                     {ok, MsgList};
                 _ ->
                    {stop, http_request_failed}
