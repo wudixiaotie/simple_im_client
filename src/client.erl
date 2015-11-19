@@ -29,10 +29,10 @@ start_link(User) ->
 init([User]) ->
     Password = uri_encode(User#user.password),
     Result = httpc:request(post,
-                  {"https://localhost:8080/server/login", [],
-                   "application/x-www-form-urlencoded",
-                   <<"phone=", (User#user.phone)/binary, "&password=", Password/binary>>},
-                  [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+                          {"https://localhost:8080/server/login", [],
+                           "application/x-www-form-urlencoded",
+                           <<"phone=", (User#user.phone)/binary, "&password=", Password/binary>>},
+                          [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
             {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
@@ -48,7 +48,32 @@ init([User]) ->
                     Server = erlang:binary_to_list(ServerBin),
                     Port = erlang:binary_to_integer(PortBin),
                     io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
-                    {ok, Socket} = gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]),
+                    case gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]) of
+                        {ok, Socket} ->
+                            ok;
+                        _ ->
+                            TokenStr = erlang:binary_to_list(Token),
+                            Result1 = httpc:request(post,
+                                                  {"https://localhost:8080/server/failed", [{"Cookie", "token=" ++ TokenStr}], "", <<>>},
+                                                  [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+                            case Result1 of
+                                {ok, {{"HTTP/1.1",200,"OK"}, _, Body1}} ->
+                                    {ok, [{<<"response">>, Attrs1}]} = toml:binary_2_term(Body1),
+                                    case lists:keyfind(<<"status">>, 1, Attrs1) of
+                                        {<<"status">>, 0} ->
+                                            {<<"server">>, ServerBin1} = lists:keyfind(<<"server">>, 1, Attrs1),
+                                            {<<"port">>, PortBin1} = lists:keyfind(<<"port">>, 1, Attrs1),
+                                            Server1 = erlang:binary_to_list(ServerBin1),
+                                            Port1 = erlang:binary_to_integer(PortBin1),
+                                            io:format("~p connect to ~p:~p~n", [self(), Server1, Port1]),
+                                            {ok, Socket} = gen_tcp:connect (Server1, Port1, [{packet,0}, {active, true}]);
+                                        _ ->
+                                            Socket = undefined
+                                    end;
+                                _ ->
+                                    Socket = undefined
+                            end
+                    end,
                     State = #state{socket = Socket, user = NewUser},
                     ok = server_ready(Socket),
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
