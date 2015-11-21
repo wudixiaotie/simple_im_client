@@ -75,7 +75,6 @@ init([User]) ->
                             end
                     end,
                     State = #state{socket = Socket, user = NewUser},
-                    ok = server_ready(Socket),
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
                             " device = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
@@ -193,16 +192,6 @@ uri_encode(Uri) when is_binary(Uri) ->
 uri_encode(Uri) ->
     erlang:list_to_binary(http_uri:encode(Uri)).
 
-
-server_ready(Socket) ->
-    receive
-        {tcp, Socket, "ready"} ->
-            ok
-    after
-        1000 ->
-            io:format("Fuck, Server is down!~n"),
-            error
-    end.
 
 get_offline_msg(Token) ->
     TokenStr = erlang:binary_to_list(Token),
