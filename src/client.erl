@@ -75,7 +75,6 @@ init([User]) ->
                             end
                     end,
                     State = #state{socket = Socket, user = NewUser},
-                    ok = server_ready(Socket),
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
                             " device = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
@@ -126,56 +125,157 @@ handle_info({search_user, Phone}, State) ->
     end,
     {noreply, State};
 handle_info({add_friend, Id}, State) ->
-    IdBin = erlang:integer_to_binary(Id),
-    Msg = <<"[[r]] id = \"a_12344\" t = \"add_contact\" message = \"fuck you\" to = ", IdBin/binary>>,
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    IdStr = erlang:integer_to_list(Id),
+    Result = httpc:request(post,
+                           {"https://localhost:8080/contact/" ++ IdStr,
+                            [{"Cookie", "token=" ++ TokenStr}],
+                            "application/x-www-form-urlencoded",
+                            <<"ask=fuck you">>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p add friend to user ~p success~n", [State#state.user#user.id, Id]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
 handle_info({accept_friend, Id}, State) ->
-    IdBin = erlang:integer_to_binary(Id),
-    Msg = <<"[[r]] id = \"a_12345\" t = \"accept_contact\" to = ", IdBin/binary>>,
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    IdStr = erlang:integer_to_list(Id),
+    Result = httpc:request(put,
+                           {"https://localhost:8080/contact/" ++ IdStr,
+                            [{"Cookie", "token=" ++ TokenStr}], [], <<>>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p accept friend to user ~p success~n", [State#state.user#user.id, Id]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
 handle_info({delete_friend, Id}, State) ->
-    IdBin = erlang:integer_to_binary(Id),
-    Msg = <<"[[r]] id = \"a_12346\" t = \"delete_contact\" to = ", IdBin/binary>>,
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    IdStr = erlang:integer_to_list(Id),
+    Result = httpc:request(delete,
+                           {"https://localhost:8080/contact/" ++ IdStr,
+                            [{"Cookie", "token=" ++ TokenStr}], [], <<>>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p delete friend to user ~p success~n", [State#state.user#user.id, Id]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
-handle_info({create_group, Members}, State) ->
-    {ok, Msg} = toml:term_2_binary({<<"r">>,
-                                    [{<<"members">>,[State#state.user#user.id|Members]},
-                                     {<<"name">>,<<"fuck">>},
-                                     {<<"t">>,<<"create_group">>},
-                                     {<<"id">>,<<"c_01">>}]}),
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+handle_info(create_group, State) ->
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    Result = httpc:request(post,
+                           {"https://localhost:8080/group",
+                            [{"Cookie", "token=" ++ TokenStr}],
+                            "application/x-www-form-urlencoded",
+                            <<"members[]=2&members[]=3&name=group1">>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p create group success~n", [State#state.user#user.id]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
 handle_info({delete_group, GroupId}, State) ->
-    {ok, Msg} = toml:term_2_binary({<<"r">>,
-                                    [{<<"group_id">>,GroupId},
-                                     {<<"t">>,<<"delete_group">>},
-                                     {<<"id">>,<<"c_01">>}]}),
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    GroupIdStr = erlang:integer_to_list(GroupId),
+    Result = httpc:request(delete,
+                           {"https://localhost:8080/group/" ++ GroupIdStr,
+                            [{"Cookie", "token=" ++ TokenStr}], [], <<>>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p delete group ~p success~n", [State#state.user#user.id, GroupIdStr]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
 handle_info({create_group_member, GroupId, Key}, State) ->
-    {ok, Msg} = toml:term_2_binary({<<"r">>,
-                                    [{<<"group_id">>,GroupId},
-                                     {<<"key">>,Key},
-                                     {<<"t">>,<<"create_group_member">>},
-                                     {<<"id">>,<<"d_01">>}]}),
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    GroupIdStr = erlang:integer_to_list(GroupId),
+    KeyEncoded = uri_encode(Key),
+    Result = httpc:request(post,
+                           {"https://localhost:8080/group/" ++ GroupIdStr ++ "/member",
+                            [{"Cookie", "token=" ++ TokenStr}],
+                            "application/x-www-form-urlencoded",
+                            <<"g_key=", KeyEncoded/binary>>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p join group ~p success~n", [State#state.user#user.id, GroupIdStr]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
 handle_info({delete_group_member, GroupId}, State) ->
-    {ok, Msg} = toml:term_2_binary({<<"r">>,
-                                    [{<<"group_id">>,GroupId},
-                                     {<<"t">>,<<"delete_group_member">>},
-                                     {<<"id">>,<<"d_01">>}]}),
-    gen_tcp:send(State#state.socket, Msg),
-    io:format ("~p client send r!~n", [self()]),
+    TokenStr = erlang:binary_to_list(State#state.user#user.token),
+    GroupIdStr = erlang:integer_to_list(GroupId),
+    Result = httpc:request(delete,
+                           {"https://localhost:8080/group/" ++ GroupIdStr ++ "/member",
+                            [{"Cookie", "token=" ++ TokenStr}], [], <<>>},
+                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
+    case Result of
+        {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
+            {ok, [{<<"response">>, Attrs}]} = toml:binary_2_term(Body),
+            case lists:keyfind(<<"status">>, 1, Attrs) of
+                {<<"status">>, 0} ->
+                    io:format("User ~p quit group ~p success~n", [State#state.user#user.id, GroupIdStr]);
+                _ ->
+                    {<<"reason">>, Reason} = lists:keyfind(<<"reason">>, 1, Attrs),
+                    io:format("Error Reason: ~p~n", [Reason])
+            end;
+        _ ->
+            io:format("Can not connect to http server~n")
+    end,
     {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
@@ -192,17 +292,6 @@ uri_encode(Uri) when is_binary(Uri) ->
     erlang:list_to_binary(http_uri:encode(erlang:binary_to_list(Uri)));
 uri_encode(Uri) ->
     erlang:list_to_binary(http_uri:encode(Uri)).
-
-
-server_ready(Socket) ->
-    receive
-        {tcp, Socket, "ready"} ->
-            ok
-    after
-        1000 ->
-            io:format("Fuck, Server is down!~n"),
-            error
-    end.
 
 get_offline_msg(Token) ->
     TokenStr = erlang:binary_to_list(Token),
