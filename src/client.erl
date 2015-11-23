@@ -293,6 +293,7 @@ uri_encode(Uri) when is_binary(Uri) ->
 uri_encode(Uri) ->
     erlang:list_to_binary(http_uri:encode(Uri)).
 
+
 get_offline_msg(Token) ->
     TokenStr = erlang:binary_to_list(Token),
     Result = httpc:request(get,
