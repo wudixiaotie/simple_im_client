@@ -367,6 +367,12 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
             io:format ("===Send ack: ~p~n", [Ack]),
             gen_tcp:send(Socket, Ack),
             io:format("~p Got request: ~p~n", [self(), {<<"r">>, Attrs}]);
+        {<<"n">>, Attrs} ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
+            io:format ("===Send ack: ~p~n", [Ack]),
+            gen_tcp:send(Socket, Ack),
+            io:format("~p Got notification: ~p~n", [self(), {<<"n">>, Attrs}]);
         _ ->
             io:format("~p Unkown message: ~p~n", [self(), H]),
             ok
