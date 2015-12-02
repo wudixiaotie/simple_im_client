@@ -48,7 +48,7 @@ init([User]) ->
                     Server = erlang:binary_to_list(ServerBin),
                     Port = erlang:binary_to_integer(PortBin),
                     io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
-                    case gen_tcp:connect (Server, Port, [{packet,0}, {active, true}]) of
+                    case ssl:connect (Server, Port, [{packet,0}, {active, true}], infinity) of
                         {ok, Socket} ->
                             ok;
                         _ ->
@@ -66,11 +66,13 @@ init([User]) ->
                                             Server1 = erlang:binary_to_list(ServerBin1),
                                             Port1 = erlang:binary_to_integer(PortBin1),
                                             io:format("~p connect to ~p:~p~n", [self(), Server1, Port1]),
-                                            {ok, Socket} = gen_tcp:connect (Server1, Port1, [{packet,0}, {active, true}]);
-                                        _ ->
+                                            {ok, Socket} = ssl:connect (Server1, Port1, [{packet,0}, {active, true}]);
+                                        Any ->
+                                            io:format("Error http:~p~n", [Any]),
                                             Socket = undefined
                                     end;
-                                _ ->
+                                Any ->
+                                    io:format("Error im:~p~n", [Any]),
                                     Socket = undefined
                             end
                     end,
@@ -78,7 +80,7 @@ init([User]) ->
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
                             " device = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
-                    gen_tcp:send(State#state.socket, Msg),
+                    ssl:send(State#state.socket, Msg),
                     io:format ("~p===client login!~n", [self()]),
                     {ok, State};
                 _ ->
@@ -93,23 +95,23 @@ init([User]) ->
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 
-handle_info ({tcp, Socket, Data}, #state{socket = Socket} = State) ->
+handle_info({ssl, Socket, Data}, #state{socket = Socket} = State) ->
     io:format ("~p===Got msg(~p): ~p~n", [self(), os:timestamp(), Data]),
     {ok, TomlList} = toml:binary_2_term(Data),
     process_package(TomlList, State),
     {noreply, State};
-handle_info ({tcp_closed, Socket}, #state{socket = Socket} = State) ->
-    {stop, tcp_closed, State};
+handle_info({ssl_closed, Socket}, #state{socket = Socket} = State) ->
+    {stop, ssl_closed, State};
 handle_info({send_msg, UserId}, State) ->
     UserIdBin = erlang:integer_to_binary(UserId),
     Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = ", UserIdBin/binary>>,
-    gen_tcp:send(State#state.socket, Msg),
+    ssl:send(State#state.socket, Msg),
     io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
     {noreply, State};
 handle_info({send_group_msg, GroupId}, State) ->
     GroupIdBin = erlang:integer_to_binary(GroupId),
     Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" g_id = ", GroupIdBin/binary>>,
-    gen_tcp:send(State#state.socket, Msg),
+    ssl:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
 handle_info({search_user, Phone}, State) ->
@@ -341,7 +343,7 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
                     {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
                     Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
                     io:format ("===Send ack: ~p~n", [Ack]),
-                    gen_tcp:send(Socket, Ack),
+                    ssl:send(Socket, Ack),
                     io:format("~p Unkown response~n", [self()]),
                     ok
             end;
@@ -349,29 +351,29 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("~p Send ack: ~p~n", [self(), Ack]),
-            gen_tcp:send(Socket, Ack);
+            ssl:send(Socket, Ack);
         {<<"gm">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("~p Send ack: ~p~n", [self(), Ack]),
-            gen_tcp:send(Socket, Ack);
+            ssl:send(Socket, Ack);
         {<<"a">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             {ok, AckBin} = toml:term_2_binary({<<"a">>, Attrs}),
             % send ack back
-            gen_tcp:send(Socket, AckBin),
+            ssl:send(Socket, AckBin),
             io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
         {<<"r">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
-            gen_tcp:send(Socket, Ack),
+            ssl:send(Socket, Ack),
             io:format("~p Got request: ~p~n", [self(), {<<"r">>, Attrs}]);
         {<<"n">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
-            gen_tcp:send(Socket, Ack),
+            ssl:send(Socket, Ack),
             io:format("~p Got notification: ~p~n", [self(), {<<"n">>, Attrs}]);
         _ ->
             io:format("~p Unkown message: ~p~n", [self(), H]),
