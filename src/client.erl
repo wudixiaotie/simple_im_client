@@ -28,10 +28,11 @@ start_link(User) ->
 
 init([User]) ->
     Password = uri_encode(User#user.password),
+    DeviceName = User#user.device,
     Result = httpc:request(post,
                           {"https://localhost:8080/server/login", [],
                            "application/x-www-form-urlencoded",
-                           <<"phone=", (User#user.phone)/binary, "&password=", Password/binary>>},
+                           <<"phone=", (User#user.phone)/binary, "&password=", Password/binary, "&device=", DeviceName/binary>>},
                           [{ssl, [{cacertfile, "priv/ssl/cowboy-ca.crt"}]}], []),
     case Result of
         {ok, {{"HTTP/1.1",200,"OK"}, _, Body}} ->
@@ -105,13 +106,14 @@ handle_info({ssl_closed, Socket}, #state{socket = Socket} = State) ->
 handle_info({send_msg, UserId}, State) ->
     UserIdBin = erlang:integer_to_binary(UserId),
     DeviceName = State#state.user#user.device,
-    Msg = <<"[[m]] id = \"a_02\" t = \"text\" c = \"hello\" to = ", UserIdBin/binary, " device = \"", DeviceName/binary, "\"">>,
+    Msg = <<"[[m]] id = \"a_02\" t = \"text\" c = \"hello\" to = ", UserIdBin/binary, " d = \"", DeviceName/binary, "\"">>,
     ssl:send(State#state.socket, Msg),
     io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
     {noreply, State};
 handle_info({send_group_msg, GroupId}, State) ->
     GroupIdBin = erlang:integer_to_binary(GroupId),
-    Msg = <<"[[gm]] id = \"a_03\" t = \"text\" c = \"hello\" g_id = ", GroupIdBin/binary>>,
+    DeviceName = State#state.user#user.device,
+    Msg = <<"[[gm]] id = \"a_03\" t = \"text\" c = \"hello\" g_id = ", GroupIdBin/binary, " d = \"", DeviceName/binary, "\"">>,
     ssl:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
