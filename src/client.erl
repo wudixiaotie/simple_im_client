@@ -104,13 +104,13 @@ handle_info({ssl_closed, Socket}, #state{socket = Socket} = State) ->
     {stop, ssl_closed, State};
 handle_info({send_msg, UserId}, State) ->
     UserIdBin = erlang:integer_to_binary(UserId),
-    Msg = <<"[[m]] id = \"a_02\" c = \"hello\" to = ", UserIdBin/binary>>,
+    Msg = <<"[[m]] id = \"a_02\" t = \"text\" c = \"hello\" to = ", UserIdBin/binary>>,
     ssl:send(State#state.socket, Msg),
     io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
     {noreply, State};
 handle_info({send_group_msg, GroupId}, State) ->
     GroupIdBin = erlang:integer_to_binary(GroupId),
-    Msg = <<"[[gm]] id = \"a_03\" c = \"hello\" g_id = ", GroupIdBin/binary>>,
+    Msg = <<"[[gm]] id = \"a_03\" t = \"text\" c = \"hello\" g_id = ", GroupIdBin/binary>>,
     ssl:send(State#state.socket, Msg),
     io:format ("===client send msg!~n"),
     {noreply, State};
