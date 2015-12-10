@@ -79,7 +79,7 @@ init([User]) ->
                     end,
                     State = #state{socket = Socket, user = NewUser},
                     Msg = <<"[[r]] id = \"abc_01\" t = \"login\" [r.user] id = ", UserIdBin/binary,
-                            " device = \"", (NewUser#user.device)/binary,
+                            " d = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
                     ssl:send(State#state.socket, Msg),
                     io:format ("~p===client login!~n", [self()]),
@@ -345,7 +345,7 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
                     end;
                 _ ->
                     {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-                    Ack = <<"[[a]] id=\"", MsgId/binary, "\" device = \"", DeviceName/binary, "\"">>,
+                    Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
                     io:format ("===Send ack: ~p~n", [Ack]),
                     ssl:send(Socket, Ack),
                     io:format("~p Unkown response~n", [self()]),
@@ -353,32 +353,38 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
             end;
         {<<"m">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\" device = \"", DeviceName/binary, "\"">>,
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             io:format ("~p Send ack: ~p~n", [self(), Ack]),
             ssl:send(Socket, Ack);
         {<<"gm">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\" device = \"", DeviceName/binary, "\"">>,
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             io:format ("~p Send ack: ~p~n", [self(), Ack]),
             ssl:send(Socket, Ack);
         {<<"a">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\" device = \"", DeviceName/binary, "\"">>,
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             % send ack back
             ssl:send(Socket, Ack),
             io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
         {<<"r">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\" device = \"", DeviceName/binary, "\"">>,
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
             ssl:send(Socket, Ack),
             io:format("~p Got request: ~p~n", [self(), {<<"r">>, Attrs}]);
         {<<"n">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
-            Ack = <<"[[a]] id=\"", MsgId/binary, "\" device = \"", DeviceName/binary, "\"">>,
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
             ssl:send(Socket, Ack),
             io:format("~p Got notification: ~p~n", [self(), {<<"n">>, Attrs}]);
+        {<<"gn">>, Attrs} ->
+            {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
+            Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
+            io:format ("===Send ack: ~p~n", [Ack]),
+            ssl:send(Socket, Ack),
+            io:format("~p Got group notification: ~p~n", [self(), {<<"gn">>, Attrs}]);
         _ ->
             io:format("~p Unkown message: ~p~n", [self(), H]),
             ok
