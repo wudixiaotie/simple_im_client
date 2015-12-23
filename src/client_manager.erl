@@ -28,13 +28,7 @@ start_link() ->
 init([]) ->
     inets:start(),
     ssl:start(),
-    User1 = #user{phone = <<"8618266175357">>, password = <<"888888">>, device = <<"android">>},
-    User2 = #user{phone = <<"8618266175357">>, password = <<"888888">>, device = <<"ipad">>},
-    User3 = #user{phone = <<"8618501260693">>, password = <<"888888">>, device = <<"ipad">>},
-    {ok, Pid1} = supervisor:start_child(client_sup, [User1]),
-    timer:sleep(100),
-    {ok, Pid2} = supervisor:start_child(client_sup, [User2]),
-    {ok, Pid3} = supervisor:start_child(client_sup, [User3]),
+    ok = start_client(600),
     {ok, []}.
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
@@ -46,3 +40,12 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+start_client(0) ->
+    ok;
+start_client(N) ->
+    {ok, [{_, _, Phone, _}]} = users:find({id, N}),
+    User = #user{phone = Phone, password = <<"888888">>, device = <<"android">>},
+    {ok, Pid} = supervisor:start_child(client_sup, [User]),
+    timer:sleep(20),
+    start_client(N - 1).

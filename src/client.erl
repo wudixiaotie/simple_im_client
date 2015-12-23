@@ -48,7 +48,7 @@ init([User]) ->
                     UserIdBin = erlang:integer_to_binary(UserId),
                     Server = erlang:binary_to_list(ServerBin),
                     Port = erlang:binary_to_integer(PortBin),
-                    io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
+                    % io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
                     case ssl:connect (Server, Port, [{packet,0}, {active, true}], infinity) of
                         {ok, Socket} ->
                             ok;
@@ -66,7 +66,7 @@ init([User]) ->
                                             {<<"port">>, PortBin1} = lists:keyfind(<<"port">>, 1, Attrs1),
                                             Server1 = erlang:binary_to_list(ServerBin1),
                                             Port1 = erlang:binary_to_integer(PortBin1),
-                                            io:format("~p connect to ~p:~p~n", [self(), Server1, Port1]),
+                                            % io:format("~p connect to ~p:~p~n", [self(), Server1, Port1]),
                                             {ok, Socket} = ssl:connect (Server1, Port1, [{packet,0}, {active, true}]);
                                         Any ->
                                             io:format("Error http:~p~n", [Any]),
@@ -82,7 +82,13 @@ init([User]) ->
                             " d = \"", (NewUser#user.device)/binary,
                             "\" token = \"", Token/binary, "\"">>,
                     ssl:send(State#state.socket, Msg),
-                    io:format ("~p===client login!~n", [self()]),
+                    % io:format ("~p===client login!~n", [self()]),
+                    case UserId + 1 < 10000 of
+                        true ->
+                            erlang:send_after(2000, self(), {send_msg, UserId + 1});
+                        _ ->
+                            ok
+                    end,
                     {ok, State};
                 _ ->
                    {stop, http_request_failed}
@@ -106,9 +112,13 @@ handle_info({ssl_closed, Socket}, #state{socket = Socket} = State) ->
 handle_info({send_msg, UserId}, State) ->
     UserIdBin = erlang:integer_to_binary(UserId),
     DeviceName = State#state.user#user.device,
-    Msg = <<"[[m]] id = \"a_02\" t = \"text\" c = \"hello\" to = ", UserIdBin/binary, " d = \"", DeviceName/binary, "\"">>,
+    A = utility:timestamp(),
+    ABin = erlang:integer_to_binary(A),
+    Id = <<"msg_id_", ABin/binary>>,
+    Msg = <<"[[m]] id = \"", Id/binary, "\" t = \"text\" c = \"hello\" to = ", UserIdBin/binary, " d = \"", DeviceName/binary, "\"">>,
     ssl:send(State#state.socket, Msg),
-    io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
+    % io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
+    erlang:send_after(2000, self(), {send_msg, UserId}),
     {noreply, State};
 handle_info({send_group_msg, GroupId}, State) ->
     GroupIdBin = erlang:integer_to_binary(GroupId),
@@ -334,9 +344,9 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
                 {<<"id">>, <<"abc_01">>} ->
                     case lists:keyfind(<<"s">>, 1, Attrs) of
                         {<<"s">>, 0} ->
-                            io:format ("~p Login success, id is ~p~n", [self(), User#user.id]),
-                            {ok, MsgList} = get_offline_msg(User#user.token),
-                            io:format("~p Got offline msg lists ~p~n", [self(), MsgList]);
+                            % io:format ("~p Login success, id is ~p~n", [self(), User#user.id]),
+                            % io:format("~p Got offline msg lists ~p~n", [self(), MsgList]),
+                            {ok, MsgList} = get_offline_msg(User#user.token);
                         {<<"s">>, 1} ->
                             {<<"r">>, Reason} = lists:keyfind(<<"r">>, 1, Attrs),
                             io:format ("~p Login failed, reason is ~p~n", [self(), Reason]);
@@ -346,7 +356,7 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
                 _ ->
                     {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
                     Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
-                    io:format ("===Send ack: ~p~n", [Ack]),
+                    % io:format ("===Send ack: ~p~n", [Ack]),
                     ssl:send(Socket, Ack),
                     io:format("~p Unkown response~n", [self()]),
                     ok
@@ -354,37 +364,37 @@ process_package([H|T], #state{socket = Socket, user = User} = State) ->
         {<<"m">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
-            io:format ("~p Send ack: ~p~n", [self(), Ack]),
+            % io:format ("~p Send ack: ~p~n", [self(), Ack]),
             ssl:send(Socket, Ack);
         {<<"gm">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
-            io:format ("~p Send ack: ~p~n", [self(), Ack]),
+            % io:format ("~p Send ack: ~p~n", [self(), Ack]),
             ssl:send(Socket, Ack);
         {<<"a">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             % send ack back
-            ssl:send(Socket, Ack),
-            io:format ("~p Msg id=~p send success~n", [self(), MsgId]);
+            % io:format ("~p Msg id=~p send success~n", [self(), MsgId]),
+            ssl:send(Socket, Ack);
         {<<"r">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
-            ssl:send(Socket, Ack),
-            io:format("~p Got request: ~p~n", [self(), {<<"r">>, Attrs}]);
+            % io:format("~p Got request: ~p~n", [self(), {<<"r">>, Attrs}]),
+            ssl:send(Socket, Ack);
         {<<"n">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
             io:format ("===Send ack: ~p~n", [Ack]),
-            ssl:send(Socket, Ack),
-            io:format("~p Got notification: ~p~n", [self(), {<<"n">>, Attrs}]);
+            % io:format("~p Got notification: ~p~n", [self(), {<<"n">>, Attrs}]),
+            ssl:send(Socket, Ack);
         {<<"gn">>, Attrs} ->
             {<<"id">>, MsgId} = lists:keyfind(<<"id">>, 1, Attrs),
             Ack = <<"[[a]] id=\"", MsgId/binary, "\" d = \"", DeviceName/binary, "\"">>,
-            io:format ("===Send ack: ~p~n", [Ack]),
-            ssl:send(Socket, Ack),
-            io:format("~p Got group notification: ~p~n", [self(), {<<"gn">>, Attrs}]);
+            % io:format ("===Send ack: ~p~n", [Ack]),
+            % io:format("~p Got group notification: ~p~n", [self(), {<<"gn">>, Attrs}]),
+            ssl:send(Socket, Ack);
         _ ->
             io:format("~p Unkown message: ~p~n", [self(), H]),
             ok
