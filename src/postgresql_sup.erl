@@ -34,7 +34,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    DbHost = "192.168.1.137",
+    DbHost = "localhost",
     DbUsername = "postgres",
     DbPassword = "postgres",
     DbDatabase = "test",
