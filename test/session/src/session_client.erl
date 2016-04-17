@@ -8,7 +8,7 @@
 -export([init/1, handle_msg/2, terminate/2]).
 
 start() ->
-    gen_msg:start_link(?MODULE, []).
+    gen_msg:start_link(?MODULE, [], []).
 find(Pid) ->
     Pid ! {find, self()},
     receive

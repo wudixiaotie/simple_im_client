@@ -118,7 +118,7 @@ handle_info({send_msg, UserId}, State) ->
     Msg = <<"[[m]] id = \"", Id/binary, "\" t = \"text\" c = \"hello\" to = ", UserIdBin/binary, " d = \"", DeviceName/binary, "\"">>,
     ssl:send(State#state.socket, Msg),
     % io:format ("~p client send msg!~p~n", [self(), os:timestamp()]),
-    erlang:send_after(2000, self(), {send_msg, UserId}),
+    % erlang:send_after(2000, self(), {send_msg, UserId}),
     {noreply, State};
 handle_info({send_group_msg, GroupId}, State) ->
     GroupIdBin = erlang:integer_to_binary(GroupId),

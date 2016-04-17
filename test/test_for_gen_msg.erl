@@ -9,7 +9,7 @@
 
 
 start_link() ->
-    gen_msg:start_link({local,?MODULE}, ?MODULE, []).
+    gen_msg:start_link({local,?MODULE}, ?MODULE, [], []).
 
 test(N) ->
     ?MODULE ! start,

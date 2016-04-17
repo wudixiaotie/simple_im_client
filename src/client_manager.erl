@@ -28,7 +28,7 @@ start_link() ->
 init([]) ->
     inets:start(),
     ssl:start(),
-    ok = start_client(1),
+    ok = start_client(2),
     {ok, []}.
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 handle_cast(_Msg, State) -> {noreply, State}.

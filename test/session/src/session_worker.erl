@@ -7,7 +7,7 @@
 
 
 start_link(Socket) ->
-    gen_msg:start_link(?MODULE, [Socket]).
+    gen_msg:start_link(?MODULE, [Socket], []).
 
 init([Socket]) ->
     ok = inet:setopts(Socket, [{active, true}, {packet, 0}, list]),
