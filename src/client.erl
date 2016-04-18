@@ -47,8 +47,9 @@ init([User]) ->
                     NewUser = User#user{id = UserId, token = Token},
                     UserIdBin = erlang:integer_to_binary(UserId),
                     Server = erlang:binary_to_list(ServerBin),
-                    Port = erlang:binary_to_integer(PortBin),
-                    % io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
+                    % Port = erlang:binary_to_integer(PortBin),
+                    Port = 1987,
+                    io:format("~p connect to ~p:~p~n", [self(), Server, Port]),
                     case ssl:connect (Server, Port, [{packet,0}, {active, true}], infinity) of
                         {ok, Socket} ->
                             ok;
